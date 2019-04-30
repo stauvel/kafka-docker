@@ -31,6 +31,7 @@ services:
       environment:
         KSQL_BOOTSTRAP_SERVERS: kafka:9092
         KSQL_LISTENERS: http://0.0.0.0:8088
+        KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8081
 
   schema-registry:
     image: confluentinc/cp-schema-registry:5.2.1
@@ -41,6 +42,7 @@ services:
       - "8081:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
       SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
 
   kafka-connect-cp:
@@ -66,47 +68,51 @@ services:
       CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
       CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
-      CONNECT_PLUGIN_PATH: '/usr/share/java'
+      CONNECT_PLUGIN_PATH: '/usr/share/java,/dbz-mysql-jar-leach'
     depends_on:
       - zookeeper
       - kafka
       - schema-registry
     volumes:
-     - $PWD/scripts:/scripts
-     - $PWD/kafka-connect-jdbc/mysql-connector-java-5.1.45-bin.jar:/usr/share/java/kafka-connect-jdbc/mysql-connector-java-5.1.45-bin.jar
+      - $PWD/scripts:/scripts
+      - $PWD/kafka-connect-jdbc/mysql-connector-java-5.1.45-bin.jar:/usr/share/java/kafka-connect-jdbc/mysql-connector-java-5.1.45-bin.jar
+      - db-leach:/db-leach/
+      - dbz-mysql-jar-leach:/dbz-mysql-jar-leach
 
   postgres:
     image: debezium/postgres:10.0
+    ports:
+      - "5432:5432"
     environment:
      - POSTGRES_USER=postgres
      - POSTGRES_PASSWORD=postgres
     volumes:
      - ./sql/schema.sql:/docker-entrypoint-initdb.d/z99_dump.sql
 
-  mysql:
-    image: mysql:5.7
-    volumes:
-       - ./sql/mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
-    environment:
-       MYSQL_ROOT_PASSWORD: password
-       MYSQL_DATABASE: db
-       MYSQL_USER: user
-       MSQL_PASSWORD: password
-
-  control-center:
-    image: confluentinc/cp-enterprise-control-center:5.2.1
-    container_name: control-center
-    restart: always
-    depends_on: 
-      - zookeeper
+  connect-debezium:
+    image: debezium/connect:0.9.3.Final
+    depends_on:
       - kafka
-      - ksql
-    ports:
-      - "9021:9021"    
+      - postgres
+      - schema-registry
+    # ports:
+    #  - 18083:18083
     environment:
-      CONTROL_CENTER_BOOTSTRAP_SERVERS: "kafka:9092"
-      CONTROL_CENTER_ZOOKEEPER_CONNECT: "zookeeper:2181"
-      CONTROL_CENTER_KSQL_URL: "http://ksql:8088"
-      CONTROL_CENTER_REST_LISTENERS: "http://0.0.0.0:9021"
-      CONTROL_CENTER_KSQL_ADVERTISED_URL: "http://localhost:8088"
-      CONTROL_CENTER_REPLICATION_FACTOR: 1
+      - BOOTSTRAP_SERVERS=kafka:9092
+    #  - REST_PORT=18083
+    #  - ADVERTISED_PORT=18083
+    #  - ADVERTISED_HOST_NAME="connect-debezium"
+      - GROUP_ID=connect-debezium
+      - CONFIG_STORAGE_TOPIC=connect-debezium-configs
+      - OFFSET_STORAGE_TOPIC=connect-debezium-offsets
+      - STATUS_STORAGE_TOPIC=connect-debezium-status
+      - KEY_CONVERTER=io.confluent.connect.avro.AvroConverter
+      - VALUE_CONVERTER=io.confluent.connect.avro.AvroConverter
+      - CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL=http://schema-registry:8081
+      - CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL=http://schema-registry:8081
+    volumes:
+      - dbz-mysql-jar-leach:/kafka/connect
+    
+volumes:
+    db-leach: {}
+    dbz-mysql-jar-leach: {}

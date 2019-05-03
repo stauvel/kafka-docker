@@ -75,9 +75,6 @@ services:
       - schema-registry
     volumes:
       - $PWD/scripts:/scripts
-      - $PWD/kafka-connect-jdbc/mysql-connector-java-5.1.45-bin.jar:/usr/share/java/kafka-connect-jdbc/mysql-connector-java-5.1.45-bin.jar
-      - db-leach:/db-leach/
-      - dbz-mysql-jar-leach:/dbz-mysql-jar-leach
 
   postgres:
     image: debezium/postgres:10.0
@@ -91,17 +88,14 @@ services:
 
   connect-debezium:
     image: debezium/connect:0.9.3.Final
+    ports:
+      - "8083:8083" 
     depends_on:
       - kafka
       - postgres
       - schema-registry
-    # ports:
-    #  - 18083:18083
     environment:
       - BOOTSTRAP_SERVERS=kafka:9092
-    #  - REST_PORT=18083
-    #  - ADVERTISED_PORT=18083
-    #  - ADVERTISED_HOST_NAME="connect-debezium"
       - GROUP_ID=connect-debezium
       - CONFIG_STORAGE_TOPIC=connect-debezium-configs
       - OFFSET_STORAGE_TOPIC=connect-debezium-offsets
@@ -111,8 +105,5 @@ services:
       - CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL=http://schema-registry:8081
       - CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL=http://schema-registry:8081
     volumes:
-      - dbz-mysql-jar-leach:/kafka/connect
+      -  $PWD/scripts:/scripts
     
-volumes:
-    db-leach: {}
-    dbz-mysql-jar-leach: {}
